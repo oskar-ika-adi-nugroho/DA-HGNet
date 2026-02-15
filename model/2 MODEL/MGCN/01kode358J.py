@@ -1,4 +1,4 @@
-﻿import math
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -146,93 +146,43 @@ class unit_tcn(nn.Module):
         return self.bn(self.conv(x))
 
 # ==============================
-# EdgeWeightedSpatialGCN (3-partition, learnable mask)
+# STGCNEdgeWeightedUnit (3-partition, learnable mask)
 # ==============================
-class EdgeWeightedSpatialGCN(nn.Module):
-    """
-    Spatial GCN:
-    - edge importance mask M (global)
-    - adaptive adjacency E(x) per-sample (AGCN-lite)
-    """
-    def __init__(self, in_channels, out_channels, A, num_point=25, reduction=4):
+class STGCNEdgeWeightedUnit(nn.Module):
+    def __init__(self, in_channels, out_channels, A, num_point=25):
         super().__init__()
         K = A.shape[0]
-        assert K == 3, "GCN requires 3-partition adjacency"
+        assert K == 3, "ST-GCN requires 3 partitions"
+        self.register_buffer('A', A)  # [3, V, V]
+        self.M = nn.Parameter(torch.ones_like(A))  # Learnable edge importance
 
-        # adjacency dasar
-        self.register_buffer('A', A)        # [3, V, V]
-        # mask edge importance (global)
-        self.M = nn.Parameter(torch.ones_like(A))  # [3, V, V]
-
-        # conv untuk tiap partisi
         self.conv_parts = nn.ModuleList([
-            nn.Conv2d(in_channels, out_channels, kernel_size=1)
-            for _ in range(K)
+            nn.Conv2d(in_channels, out_channels, kernel_size=1) for _ in range(K)
         ])
-
-        # adjacency adaptif E(x)
-        inter_channels = max(1, in_channels // reduction)
-        self.theta = nn.Conv2d(in_channels, inter_channels, kernel_size=1, bias=True)
-        self.phi   = nn.Conv2d(in_channels, inter_channels, kernel_size=1, bias=True)
-
-        # skalar untuk kontribusi adaptive adjacency
-        self.gamma = nn.Parameter(torch.zeros(1))
-
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
-        # init
         for conv in self.conv_parts:
             nn.init.kaiming_normal_(conv.weight, mode='fan_out')
             if conv.bias is not None:
                 nn.init.constant_(conv.bias, 0)
-
         nn.init.constant_(self.bn.weight, 1)
         nn.init.constant_(self.bn.bias, 0)
 
-        nn.init.kaiming_normal_(self.theta.weight, mode='fan_out')
-        if self.theta.bias is not None: nn.init.constant_(self.theta.bias, 0)
-        nn.init.kaiming_normal_(self.phi.weight, mode='fan_out')
-        if self.phi.bias is not None: nn.init.constant_(self.phi.bias, 0)
-
-    def _compute_adaptive_E(self, x):
-        """
-        x: [N, C, T, V]
-        return: E(x) [N, V, V]
-        """
-        N, C, T, V = x.shape
-        x_mean = x.mean(dim=2, keepdim=True)     # [N, C, 1, V]
-
-        theta_x = self.theta(x_mean).squeeze(2)  # [N, C', V]
-        phi_x   = self.phi(x_mean).squeeze(2)    # [N, C', V]
-
-        theta_x = theta_x.permute(0, 2, 1)       # [N, V, C']
-        scores = torch.matmul(theta_x, phi_x) / math.sqrt(theta_x.size(-1))
-        E = scores.softmax(dim=-1)               # [N, V, V]
-        return E
-
     def forward(self, x):
-        """
-        x: [N, C, T, V]
-        """
         N, C, T, V = x.shape
-        E = self._compute_adaptive_E(x)  # [N, V, V]
-
-        x_perm = x.permute(0, 2, 3, 1)   # [N, T, V, C]
         out = 0
+        x_perm = x.permute(0, 2, 3, 1).contiguous()  # [N, T, V, C]
 
         for k in range(self.A.shape[0]):
-            A_k = self.A[k] * self.M[k]         # [V, V]
-            A_eff = A_k.unsqueeze(0) + self.gamma * E   # [N, V, V]
-
-            agg = torch.einsum("nvw,ntvc->ntcw", A_eff, x_perm)
+            A_k_weighted = self.A[k] * self.M[k]  # [V, V]
+            agg = torch.einsum('vw,ntvc->ntcw', A_k_weighted, x_perm)
             agg = agg.permute(0, 2, 1, 3).contiguous()  # [N, C, T, V]
             out += self.conv_parts[k](agg)
 
         out = self.bn(out)
         out = self.relu(out)
         return out
-
 
 # ==============================
 # MHSA with Differential Attention + RPE
@@ -325,7 +275,7 @@ class MHSA(nn.Module):
         return x_spatial
 
 # ==============================
-# unit_vit: Transformer + EdgeWeightedSpatialGCN (Early Layers)
+# unit_vit: Transformer + ST-GCN (Early Layers)
 # ==============================
 class unit_vit(nn.Module):
     def __init__(self, dim_in, dim, A, num_of_heads, add_skip_connection=True,
@@ -342,7 +292,7 @@ class unit_vit(nn.Module):
 
         self.use_gcn_branch = layer <= 4
         if self.use_gcn_branch:
-            self.gcn_branch = EdgeWeightedSpatialGCN(dim_in, dim, A, num_point=num_point)
+            self.gcn_branch = STGCNEdgeWeightedUnit(dim_in, dim, A, num_point=num_point)
         else:
             self.gcn_branch = None
 
@@ -412,25 +362,25 @@ class Model(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, 0.2, 10)]
 
         self.l1 = TCN_ViT_unit(3, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                               num_point=25, layer=1, drop_path=dpr[0])
+                              num_point=25, layer=1, drop_path=dpr[0])
         self.l2 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads,
-                               pe=True, num_point=25, layer=2, drop_path=dpr[1])
+                              pe=True, num_point=25, layer=2, drop_path=dpr[1])
         self.l3 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads,
-                               pe=True, num_point=25, layer=3, drop_path=dpr[2])
+                              pe=True, num_point=25, layer=3, drop_path=dpr[2])
         self.l4 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads,
-                               pe=True, num_point=25, layer=4, drop_path=dpr[3])
+                              pe=True, num_point=25, layer=4, drop_path=dpr[3])
         self.l5 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, stride=2,
-                               num_of_heads=num_of_heads, pe=True, num_point=25, layer=5, drop_path=dpr[4])
+                              num_of_heads=num_of_heads, pe=True, num_point=25, layer=5, drop_path=dpr[4])
         self.l6 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads,
-                               pe=True, num_point=25, layer=6, prev_stride=2, drop_path=dpr[5])
+                              pe=True, num_point=25, layer=6, prev_stride=2, drop_path=dpr[5])
         self.l7 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads,
-                               pe=True, num_point=25, layer=7, prev_stride=2, drop_path=dpr[6])
+                              pe=True, num_point=25, layer=7, prev_stride=2, drop_path=dpr[6])
         self.l8 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, stride=2,
-                               num_of_heads=num_of_heads, pe=True, num_point=25, layer=8, prev_stride=2, drop_path=dpr[7])
+                              num_of_heads=num_of_heads, pe=True, num_point=25, layer=8, prev_stride=2, drop_path=dpr[7])
         self.l9 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads,
-                               pe=True, num_point=25, layer=9, prev_stride=4, drop_path=dpr[8])
+                              pe=True, num_point=25, layer=9, prev_stride=4, drop_path=dpr[8])
         self.l10 = TCN_ViT_unit(36 * num_of_heads, 36 * num_of_heads, A, residual=True, num_of_heads=num_of_heads,
-                                pe=True, num_point=25, layer=10, prev_stride=4, drop_path=dpr[9])
+                               pe=True, num_point=25, layer=10, prev_stride=4, drop_path=dpr[9])
 
         self.fc = nn.Linear(36 * num_of_heads, num_class)
         nn.init.normal_(self.fc.weight, 0, math.sqrt(2. / num_class))
@@ -450,7 +400,7 @@ class Model(nn.Module):
         x = self.l4(x, self.joint_label, groups)
         x = self.l5(x, self.joint_label, groups)
         x = self.l6(x, self.joint_label, groups)
-        x = self.l7(x, self.joint_label, groups)
+        x = self.l7(x, self.joint_label, groups)  # FIXED: joint_label
         x = self.l8(x, self.joint_label, groups)
         x = self.l9(x, self.joint_label, groups)
         x = self.l10(x, self.joint_label, groups)
