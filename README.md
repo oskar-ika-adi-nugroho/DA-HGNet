@@ -1,7 +1,8 @@
 # DA-HTCN: Differential-Attention Hyperedge Temporal Convolution Network
 
-This repository contains the reference implementation of **DA-HTCN**, a hybrid skeleton-based action recognition model that combines:
 This code is based on Hyperformer  [Hypergraph Transformer for Skeleton-based Action Recognition.](https://arxiv.org/pdf/2211.09590.pdf). We made modifications for DA-HTCN.
+This repository contains the reference implementation of **DA-HTCN**, a hybrid skeleton-based action recognition model that combines:
+
 - **Differential Hyperedge Self-Attention (DHSA)** for topology-aware global spatial interaction
 - **Multi-Scale Temporal Convolution (MultiScale-TCN)** for efficient temporal modeling
 - An **early-layer graph branch (Layers 1–4)** to strengthen local spatial grounding
