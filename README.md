@@ -66,28 +66,6 @@ DA-HTCN is derived from the Hyperformer codebase, but differs in several key asp
 6. **Engineering updates for stability and reproducibility**
    - Minor refactoring and device-safe buffers (e.g., hop-distance tensor handling) to improve training stability and reproducibility across environments.
 
-## Results on NTU RGB+D 60
-
-Table 1 below is reproduced from the draft manuscript (X-Sub and X-View):
-
-| Architecture | Method | X-Sub (%) | X-View (%) |
-| --- | --- | --- | --- |
-| Graph Convolution | ST-GCN [1] | 81.5 | 88.3 |
-|  | 2S-AGCN [11] | 88.5 | 95.1 |
-|  | Shift-GCN [12] | 90.7 | 96.5 |
-|  | SGN [26] | 89.0 | 94.5 |
-|  | CTR-GCN [27] | 92.4 | 96.8 |
-|  | Info-GCN [28] | 93.0 | 97.1 |
-|  | HLP-GCN [29] | 92.7 | 96.9 |
-|  | HD-GCN [30] | 93.4 | 97.2 |
-| Transformer | ST-TR [31] | 89.9 | 96.1 |
-|  | DSTA [32] | 91.5 | 96.4 |
-|  | Hyperformer [9]* | 92.9 | 95.1 |
-| Hybrid Model(GCN + Att) | Dynamic GCN [33] | 91.5 | 96.0 |
-|  | EfficientGCN-B4 [34] | 91.7 | 95.7 |
-|  | DA-HTCN (ours) | 93.48 | 96.70 |
-
-\* The Hyperformer entry is listed as in the manuscript table.
 
 ## Multi-stream setting (RICH5)
 
