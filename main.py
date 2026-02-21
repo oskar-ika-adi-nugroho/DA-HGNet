@@ -24,9 +24,11 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 # from cosine_lr_schedueler import CosineLRScheduler
 from torchlight import DictAction
+
 import resource
 import copy
 from torch import linalg as LA
+
 
 
 "https://github.com/ajbrock/BigGAN-PyTorch/blob/master/utils.py"
@@ -54,11 +56,13 @@ def init_seed(seed):
     random.seed(seed)
     # torch.backends.cudnn.enabled = True
     # training speed is too slow if set to True
-    torch.backends.cudnn.deterministic = False
+    # torch.backends.cudnn.deterministic = False
+    torch.backends.cudnn.deterministic = True
 
     # on cuda 11 cudnn8, the default algorithm is very slow
     # unlike on cuda 10, the default works well
-    torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = False
 
 def import_class(import_str):
     mod_str, _sep, class_str = import_str.rpartition('.')
@@ -250,7 +254,7 @@ def get_parser():
 
 
 class Processor():
-    """ 
+    """
         Processor for Skeleton-based Action Recgnition
     """
 
@@ -419,7 +423,7 @@ class Processor():
                 lr = self.arg.base_lr * (epoch + 1) / self.arg.warm_up_epoch
             else:
                 lr = self.arg.base_lr * (
-                        self.arg.lr_decay_rate ** np.sum(epoch >= np.array(self.arg.step)))
+                    self.arg.lr_decay_rate ** np.sum(epoch >= np.array(self.arg.step)))
             for param_group in self.optimizer.param_groups:
                 param_group['lr'] = lr
             return lr
@@ -466,7 +470,7 @@ class Processor():
 
         # mix_precision is slower for this model!!!
         use_amp = True
-        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+        scaler = torch.amp.GradScaler(enabled=use_amp) # <<< KODE DIPERBAIKI
         # torch.autograd.set_detect_anomaly(True)
 
         soft_label_emma = 0
@@ -494,11 +498,19 @@ class Processor():
                     return loss.mean()
 
 
-            with torch.cuda.amp.autocast(enabled=use_amp):
-                output, z = self.model(data, F.one_hot(label, num_classes=self.model.module.num_class))
-                # output, z = self.model(data, F.one_hot(label, num_classes=self.model.num_class))
+            with torch.amp.autocast(device_type='cuda', enabled=use_amp): # <<< KODE DIPERBAIKI
+                # output, z = self.model(data, F.one_hot(label, num_classes=self.model.module.num_class))
+                output, z = self.model(data, F.one_hot(label, num_classes=self.model.num_class))
 
                 loss = self.loss(output, label)
+                # auxiliary losses dari HypDec
+                if isinstance(z, dict):
+                    # bobot awal (silakan tuning):
+                    beta_rec1, beta_rec2, beta_quant = 0.5, 0.5, 0.25
+                    loss = loss + beta_rec1 * z.get('l_rec1', 0.0) \
+                           + beta_rec2 * z.get('l_rec2', 0.0) \
+                           + beta_quant * z.get('l_quant', 0.0)
+
             loss2 = torch.zeros_like(loss).cuda(loss.device)
 
 
@@ -570,8 +582,8 @@ class Processor():
                 with torch.no_grad():
                     data = data.float().cuda(self.output_device)
                     label = label.long().cuda(self.output_device)
-                    output, z = self.model(data, F.one_hot(label, num_classes=self.model.module.num_class))
-                    # output, z = self.model(data, F.one_hot(label, num_classes=self.model.num_class))
+                    # output, z = self.model(data, F.one_hot(label, num_classes=self.model.module.num_class))
+                    output, z = self.model(data, F.one_hot(label, num_classes=self.model.num_class))
                     if arg.ema:
                         self.model_ema.cuda(self.output_device)
                         output_ema, z_ema = self.model_ema(data, F.one_hot(label, num_classes=self.model.module.num_class))
@@ -763,7 +775,8 @@ if __name__ == '__main__':
     p = parser.parse_args()
     if p.config is not None:
         with open(p.config, 'r') as f:
-            default_arg = yaml.load(f)
+            # default_arg = yaml.load(f)
+            default_arg = yaml.load(f, Loader=yaml.SafeLoader)
         key = vars(p).keys()
         for k in default_arg.keys():
             if k not in key:
