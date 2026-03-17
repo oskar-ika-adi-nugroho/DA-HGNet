@@ -85,7 +85,7 @@ def weights_init(m):
 
 
 # ============================================================
-# Motion-only input D (Torch, GPU)  [SEPADAN dengan kode377 D-only]
+# Motion-only input D (Torch, GPU)
 # Input : x [N, 3, T, V, M]
 # Output: D [N, 3, T, V, M]
 # D[:, :, t] = x[:, :, t+1] - x[:, :, t], last frame = 0
@@ -95,20 +95,21 @@ class MotionOnlyInput(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        D = torch.zeros_like(x)
-        D[:, :, :-1, :, :] = x[:, :, 1:, :, :] - x[:, :, :-1, :, :]
-        return D
+        d = torch.zeros_like(x)
+        d[:, :, :-1, :, :] = x[:, :, 1:, :, :] - x[:, :, :-1, :, :]
+        return d
 
 
 # ============================================================
-# Temporal Modules (same style as kode358)
+# Temporal Modules
 # ============================================================
 class TemporalConv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1):
         super().__init__()
         pad = (kernel_size + (kernel_size - 1) * (dilation - 1) - 1) // 2
         self.conv = nn.Conv2d(
-            in_channels, out_channels,
+            in_channels,
+            out_channels,
             kernel_size=(kernel_size, 1),
             padding=(pad, 0),
             stride=(stride, 1),
@@ -146,8 +147,11 @@ class MultiScale_TemporalConv(nn.Module):
                     nn.BatchNorm2d(branch_channels),
                     nn.ReLU(inplace=True),
                     TemporalConv(
-                        branch_channels, branch_channels,
-                        kernel_size=ks, stride=stride, dilation=d
+                        branch_channels,
+                        branch_channels,
+                        kernel_size=ks,
+                        stride=stride,
+                        dilation=d,
                     ),
                 )
                 for ks, d in zip(kernel_size, dilations)
@@ -169,9 +173,7 @@ class MultiScale_TemporalConv(nn.Module):
             nn.BatchNorm2d(branch_channels),
         )
         if stride != 1:
-            last_branch.add_module(
-                "pool", nn.AvgPool2d(kernel_size=(stride, 1), stride=(stride, 1))
-            )
+            last_branch.add_module("pool", nn.AvgPool2d(kernel_size=(stride, 1), stride=(stride, 1)))
         self.branches.append(last_branch)
 
         if not residual:
@@ -179,10 +181,7 @@ class MultiScale_TemporalConv(nn.Module):
         elif in_channels == out_channels and stride == 1:
             self.residual = lambda x: x
         else:
-            self.residual = TemporalConv(
-                in_channels, out_channels,
-                kernel_size=residual_kernel_size, stride=stride
-            )
+            self.residual = TemporalConv(in_channels, out_channels, kernel_size=residual_kernel_size, stride=stride)
 
         self.apply(weights_init)
 
@@ -197,7 +196,8 @@ class unit_tcn(nn.Module):
         super().__init__()
         pad = int((kernel_size - 1) / 2)
         self.conv = nn.Conv2d(
-            in_channels, out_channels,
+            in_channels,
+            out_channels,
             kernel_size=(kernel_size, 1),
             padding=(pad, 0),
             stride=(stride, 1),
@@ -211,19 +211,18 @@ class unit_tcn(nn.Module):
 
 
 # ============================================================
-# STGCNEdgeWeightedUnit (kode358)
+# STGCNEdgeWeightedUnit
 # ============================================================
 class STGCNEdgeWeightedUnit(nn.Module):
     def __init__(self, in_channels, out_channels, A, num_point=25):
         super().__init__()
-        K = A.shape[0]
-        assert K == 3, "ST-GCN requires 3 partitions"
+        k = A.shape[0]
+        assert k == 3, "ST-GCN requires 3 partitions"
+
         self.register_buffer("A", A)  # [3, V, V]
         self.M = nn.Parameter(torch.ones_like(A))
 
-        self.conv_parts = nn.ModuleList(
-            [nn.Conv2d(in_channels, out_channels, kernel_size=1) for _ in range(K)]
-        )
+        self.conv_parts = nn.ModuleList([nn.Conv2d(in_channels, out_channels, kernel_size=1) for _ in range(k)])
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
@@ -231,16 +230,16 @@ class STGCNEdgeWeightedUnit(nn.Module):
             nn.init.kaiming_normal_(conv.weight, mode="fan_out")
             if conv.bias is not None:
                 nn.init.constant_(conv.bias, 0)
+
         nn.init.constant_(self.bn.weight, 1)
         nn.init.constant_(self.bn.bias, 0)
 
     def forward(self, x):
-        # x: [N, C, T, V]
         x_perm = x.permute(0, 2, 3, 1).contiguous()  # [N, T, V, C]
         out = 0
         for k in range(self.A.shape[0]):
-            A_k = self.A[k] * self.M[k]              # [V, V]
-            agg = torch.einsum("vw,ntvc->ntcw", A_k, x_perm)
+            a_k = self.A[k] * self.M[k]  # [V, V]
+            agg = torch.einsum("vw,ntvc->ntcw", a_k, x_perm)
             agg = agg.permute(0, 2, 1, 3).contiguous()
             out = out + self.conv_parts[k](agg)
         out = self.bn(out)
@@ -249,13 +248,13 @@ class STGCNEdgeWeightedUnit(nn.Module):
 
 
 # ============================================================
-# MHSA with Differential Attention + RPE (kode358, fixed)
-# - lambda_init uses layer (sepadan dengan kode377 D-only kamu)
+# MHSA with Differential Attention + hop-RPE + hyperedge token
+# - lambda_init uses layer index
 # - attn_drop applied after softmax
-# - hops stored as buffer
+# - hops registered as buffer
 # ============================================================
-def lambda_init_fn(depth):
-    return 0.8 - 0.6 * math.exp(-0.3 * depth)
+def lambda_init_fn(layer_idx: int) -> float:
+    return 0.8 - 0.6 * math.exp(-0.3 * float(layer_idx))
 
 
 class MHSA(nn.Module):
@@ -279,28 +278,27 @@ class MHSA(nn.Module):
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
 
-        # build hop-distance matrix
         h1 = A.sum(0).detach().cpu().numpy()
         h1[h1 != 0] = 1
         h = [np.eye(num_point), h1]
-        hops = np.zeros((num_point, num_point), dtype=np.float32)
+        hops_np = np.zeros((num_point, num_point), dtype=np.float32)
+
         for i in range(2, num_point):
             hi = h[i - 1] @ h1.T
             hi[hi != 0] = 1
             h.append(hi)
+
         for i in range(num_point - 1, 0, -1):
             if np.any(h[i] - h[i - 1]):
                 h[i] = h[i] - h[i - 1]
-            hops += i * h[i]
+            hops_np += i * h[i]
 
-        self.register_buffer("hops", torch.tensor(hops).long())
-        self.rpe = nn.Parameter(torch.zeros((int(hops.max()) + 1, dim)))
+        hops = torch.tensor(hops_np).long()
+        self.register_buffer("hops", hops)
+        self.rpe = nn.Parameter(torch.zeros((int(hops.max().item()) + 1, dim)))
 
         self.w1 = nn.Parameter(torch.zeros(num_heads, head_dim))
-        self.outer = nn.Parameter(
-            torch.stack([torch.eye(num_point) for _ in range(num_heads)], dim=0),
-            requires_grad=True,
-        )
+        self.outer = nn.Parameter(torch.stack([torch.eye(num_point) for _ in range(num_heads)], dim=0), requires_grad=True)
         self.alpha = nn.Parameter(torch.zeros(1), requires_grad=True)
 
         self.v = nn.Conv2d(dim_in, dim, 1, bias=qkv_bias)
@@ -311,7 +309,6 @@ class MHSA(nn.Module):
         self.proj = nn.Conv2d(dim, dim, 1, groups=num_heads)
         self.proj_drop = nn.Dropout(proj_drop)
 
-        # differential attention params
         self.lambda_init = lambda_init_fn(layer)
         self.lambda_q1 = nn.Parameter(torch.randn(head_dim // 2) * 0.1)
         self.lambda_k1 = nn.Parameter(torch.randn(head_dim // 2) * 0.1)
@@ -330,17 +327,17 @@ class MHSA(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x, e):
-        # x: [N,C,T,V], e: [N,Ce,T,V] aligned to dim_in via pe path
-        N, C, T, V = x.shape
+        # x: [N,C,T,V], e: [N,dim,T,V]
+        n, c, t, vtx = x.shape
 
-        v = self.v(x).reshape(N, self.num_heads, -1, T, V).permute(0, 3, 1, 4, 2)
-        k = self.k(x).reshape(N, 2, self.num_heads, -1, T, V).permute(1, 0, 4, 2, 5, 3)
-        q = self.q(x).reshape(N, 2, self.num_heads, -1, T, V).permute(1, 0, 4, 2, 5, 3)
+        v = self.v(x).reshape(n, self.num_heads, -1, t, vtx).permute(0, 3, 1, 4, 2)  # [N,T,H,V,Dh]
+        k = self.k(x).reshape(n, 2, self.num_heads, -1, t, vtx).permute(1, 0, 4, 2, 5, 3)
+        q = self.q(x).reshape(n, 2, self.num_heads, -1, t, vtx).permute(1, 0, 4, 2, 5, 3)
         k1, k2 = k[0], k[1]
         q1, q2 = q[0], q[1]
 
-        e_k = e.reshape(N, self.num_heads, -1, T, V).permute(0, 3, 1, 4, 2)
-        k_r = self.rpe[self.hops].view(V, V, self.num_heads, -1)
+        e_k = e.reshape(n, self.num_heads, -1, t, vtx).permute(0, 3, 1, 4, 2)
+        k_r = self.rpe[self.hops].view(vtx, vtx, self.num_heads, -1)
 
         b1 = torch.einsum("bthnc,nmhc->bthnm", q1, k_r)
         b2 = torch.einsum("bthnc,nmhc->bthnm", q2, k_r)
@@ -364,13 +361,17 @@ class MHSA(nn.Module):
         x2 = torch.matmul(self.alpha * attn2 + self.outer, v)
         x_spatial = x1 - lambda_full * x2
 
-        x_spatial = x_spatial.transpose(3, 4).reshape(N, T, -1, V).transpose(1, 2)
+        x_spatial = x_spatial.transpose(3, 4).reshape(n, t, -1, vtx).transpose(1, 2)  # [N,dim,T,V]
         x_spatial = self.proj_drop(self.proj(x_spatial))
         return x_spatial
 
 
 # ============================================================
-# unit_vit (kode358): Transformer + ST-GCN early layers
+# unit_vit: Transformer + ST-GCN (Full Graph layers 1..10)
+# Aligned with kode377_FullGraph:
+# - hyperedge token built from raw x by joint_label pooling + pe_proj
+# - MHSA consumes x_norm and e
+# - GCN consumes raw x
 # ============================================================
 class unit_vit(nn.Module):
     def __init__(
@@ -411,28 +412,33 @@ class unit_vit(nn.Module):
         )
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-        self.use_gcn_branch = layer <= 4
-        self.gcn_branch = STGCNEdgeWeightedUnit(dim_in, dim, A, num_point=num_point) if self.use_gcn_branch else None
+        # FULL GRAPH: always enable ST-GCN branch
+        self.gcn_branch = STGCNEdgeWeightedUnit(dim_in, dim, A, num_point=num_point)
 
-    def forward(self, x, joint_label_t, groups):
-        # joint_label_t: [V] long tensor on device
-        label = F.one_hot(joint_label_t).float()           # [V, G]
-        denom = label.sum(dim=0, keepdim=True).clamp_min(1.0)
-        z = x @ (label / denom)                            # [N, C, T, G]
+    def _build_hyperedge_token(self, x, joint_label_t):
+        if self.pe_proj is None:
+            raise ValueError("pe_proj is None. Set pe=True to build hyperedge token.")
 
-        if self.pe_proj is not None:
-            z = self.pe_proj(z).permute(3, 0, 1, 2)       # [G, N, C, T]
-            e = z[joint_label_t].permute(1, 2, 3, 0)      # [N, C, T, V]
-        else:
-            e = z.permute(3, 0, 1, 2)
+        num_groups = int(joint_label_t.max().item()) + 1
+        label = F.one_hot(joint_label_t, num_classes=num_groups).float()  # [V,G]
+        label = label / (label.sum(dim=0, keepdim=True) + 1e-6)
 
+        z = x @ label                                                    # [N,C,T,G]
+        z = self.pe_proj(z)                                              # [N,dim,T,G]
+        z_g = z.permute(3, 0, 1, 2).contiguous()                          # [G,N,dim,T]
+        e = z_g[joint_label_t].permute(1, 2, 3, 0).contiguous()           # [N,dim,T,V]
+        return e
+
+    def forward(self, x, joint_label_t, groups=None):
         x_skip = self.skip_proj(x)
-        x_norm = self.norm1(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-        x_transformer = self.attn(x_norm, e)
 
-        x_gcn = self.gcn_branch(x) if self.use_gcn_branch else 0.0
-        x_fused = x_transformer + x_gcn
-        x_out = self.drop_path(x_fused)
+        x_norm = self.norm1(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        e = self._build_hyperedge_token(x, joint_label_t)
+
+        x_transformer = self.attn(x_norm, e)
+        x_gcn = self.gcn_branch(x)
+
+        x_out = self.drop_path(x_transformer + x_gcn)
         x_out = x_skip + x_out
         return x_out
 
@@ -487,14 +493,13 @@ class TCN_ViT_unit(nn.Module):
         else:
             self.residual = unit_tcn(in_channels, out_channels, kernel_size=1, stride=stride)
 
-    def forward(self, x, joint_label_t, groups):
+    def forward(self, x, joint_label_t, groups=None):
         y = self.act(self.tcn1(self.vit1(x, joint_label_t, groups)) + self.residual(x))
         return y
 
 
 # ============================================================
-# Final Model: kode358 backbone, input replaced by motion-only D
-# (fair vs kode377 D-only: same D definition, same dim, same dpr schedule)
+# Final Model: kode358D FullGraph (motion-only input)
 # ============================================================
 class Model(nn.Module):
     def __init__(
@@ -513,8 +518,9 @@ class Model(nn.Module):
         super().__init__()
         if graph is None:
             raise ValueError("Graph class must be provided.")
-        if joint_label is None:
-            joint_label = []
+
+        if joint_label is None or len(joint_label) == 0:
+            joint_label = [0] * num_point
 
         Graph = import_class(graph)
         self.graph = Graph(**graph_args)
@@ -525,43 +531,29 @@ class Model(nn.Module):
         self.num_point = num_point
         self.num_person = num_person
 
-        # store joint_label as buffer tensor
-        if len(joint_label) > 0:
-            self.register_buffer("joint_label_t", torch.tensor(joint_label, dtype=torch.long))
-        else:
-            self.register_buffer("joint_label_t", torch.zeros(num_point, dtype=torch.long))
+        self.register_buffer("joint_label_t", torch.tensor(joint_label, dtype=torch.long))
 
         # motion-only input
         self.motion_only = MotionOnlyInput()
 
-        # BN over (M*V*C), C still 3 but now motion feature
+        # BN over (M*V*C)
         self.data_bn = nn.BatchNorm1d(num_person * in_channels * num_point)
 
         dpr = [x.item() for x in torch.linspace(0, 0.2, 10)]
-        base_dim = 36 * num_of_heads
+        width = 36 * num_of_heads
 
-        self.l1 = TCN_ViT_unit(3, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=1, drop_path=dpr[0])
-        self.l2 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=2, drop_path=dpr[1])
-        self.l3 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=3, drop_path=dpr[2])
-        self.l4 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=4, drop_path=dpr[3])
-        self.l5 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, stride=2, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=5, drop_path=dpr[4])
-        self.l6 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=6, prev_stride=2, drop_path=dpr[5])
-        self.l7 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=7, prev_stride=2, drop_path=dpr[6])
-        self.l8 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, stride=2, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=8, prev_stride=2, drop_path=dpr[7])
-        self.l9 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                              num_point=num_point, layer=9, prev_stride=4, drop_path=dpr[8])
-        self.l10 = TCN_ViT_unit(base_dim, base_dim, A, residual=True, num_of_heads=num_of_heads, pe=True,
-                               num_point=num_point, layer=10, prev_stride=4, drop_path=dpr[9])
+        self.l1 = TCN_ViT_unit(3, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=1, drop_path=dpr[0])
+        self.l2 = TCN_ViT_unit(width, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=2, drop_path=dpr[1])
+        self.l3 = TCN_ViT_unit(width, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=3, drop_path=dpr[2])
+        self.l4 = TCN_ViT_unit(width, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=4, drop_path=dpr[3])
+        self.l5 = TCN_ViT_unit(width, width, A, residual=True, stride=2, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=5, drop_path=dpr[4])
+        self.l6 = TCN_ViT_unit(width, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=6, prev_stride=2, drop_path=dpr[5])
+        self.l7 = TCN_ViT_unit(width, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=7, prev_stride=2, drop_path=dpr[6])
+        self.l8 = TCN_ViT_unit(width, width, A, residual=True, stride=2, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=8, prev_stride=2, drop_path=dpr[7])
+        self.l9 = TCN_ViT_unit(width, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=9, prev_stride=4, drop_path=dpr[8])
+        self.l10 = TCN_ViT_unit(width, width, A, residual=True, num_of_heads=num_of_heads, pe=True, num_point=num_point, layer=10, prev_stride=4, drop_path=dpr[9])
 
-        self.fc = nn.Linear(base_dim, num_class)
+        self.fc = nn.Linear(width, num_class)
         nn.init.normal_(self.fc.weight, 0, math.sqrt(2.0 / num_class))
         bn_init(self.data_bn, 1)
         self.drop_out = nn.Dropout(drop_out) if drop_out else nn.Identity()
@@ -572,33 +564,31 @@ class Model(nn.Module):
         replaced by D(motion) computed in torch on GPU.
         """
         jl = self.joint_label_t
-        num_groups = int(jl.max().item()) + 1 if jl.numel() > 0 else 1
-        groups = [[int(i) for i in (jl == g).nonzero(as_tuple=False).view(-1).tolist()] for g in range(num_groups)]
 
         # 1) motion-only input
         x = self.motion_only(x)  # [N,3,T,V,M]
 
         # 2) BN/reshape pipeline
-        N, C, T, V, M = x.size()
-        x = x.permute(0, 4, 3, 1, 2).contiguous().view(N, M * V * C, T)
+        n, c, t, vtx, m = x.size()
+        x = x.permute(0, 4, 3, 1, 2).contiguous().view(n, m * vtx * c, t)
         x = self.data_bn(x)
-        x = x.view(N, M, V, C, T).contiguous().view(N * M, V, C, T).permute(0, 2, 3, 1).contiguous()  # [N*M,C,T,V]
+        x = x.view(n, m, vtx, c, t).contiguous().view(n * m, vtx, c, t).permute(0, 2, 3, 1).contiguous()  # [N*M,C,T,V]
 
-        # 3) backbone kode358
-        x = self.l1(x, jl, groups)
-        x = self.l2(x, jl, groups)
-        x = self.l3(x, jl, groups)
-        x = self.l4(x, jl, groups)
-        x = self.l5(x, jl, groups)
-        x = self.l6(x, jl, groups)
-        x = self.l7(x, jl, groups)
-        x = self.l8(x, jl, groups)
-        x = self.l9(x, jl, groups)
-        x = self.l10(x, jl, groups)
+        # 3) backbone FullGraph
+        x = self.l1(x, jl, None)
+        x = self.l2(x, jl, None)
+        x = self.l3(x, jl, None)
+        x = self.l4(x, jl, None)
+        x = self.l5(x, jl, None)
+        x = self.l6(x, jl, None)
+        x = self.l7(x, jl, None)
+        x = self.l8(x, jl, None)
+        x = self.l9(x, jl, None)
+        x = self.l10(x, jl, None)
 
         # 4) head
-        x = x.mean(dim=[-1, -2])              # [N*M, base_dim]
-        x = x.view(N, M, -1).mean(dim=1)      # [N, base_dim]
+        x = x.mean(dim=[-1, -2])           # [N*M, width]
+        x = x.view(n, m, -1).mean(dim=1)   # [N, width]
         x = self.drop_out(x)
         x = self.fc(x)
         return x, y
