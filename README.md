@@ -44,15 +44,13 @@ DA-HTCN is derived from the Hyperformer codebase, but differs in several key asp
    - Keep **hop-based RPE** and **hyperedge-token interactions** (joint-to-part pooling), but integrate them into both attention branches consistently.
    - Use a unified DHSA description aligned with Section 3 of the manuscript (Figures 2–3).
 
-3. **Early-layer graph branch (Layers 1–4 only)**
-   - Add an explicit GCN branch only in the first four blocks for stronger kinematic inductive bias early in the network.
+3. ** Two variants GCN**   
    - Two variants are supported:
      - **DA-HTCN-MGCN**: masked (edge-importance) topology over a fixed K-partition adjacency
      - **DA-HTCN-MA-GCN**: masked topology + **sample-adaptive adjacency** blended with a learnable scalar gate
 
-4. **Hybrid spatial fusion policy**
-   - In Layers 1–4, DHSA and GCN outputs are fused by **summation** inside the spatial sub-layer before DropPath and residual addition.
-   - In Layers 5–10, the GCN branch is removed and the spatial module reduces to DHSA only.
+4. **Spatial fusion policy**
+   - In Layers 1–10, DHSA and GCN outputs are fused by **summation** inside the spatial sub-layer before DropPath and residual addition.   
 
 5. **RICH5 input decomposition support (J/E/S/D/A)**
    - In addition to classic 4-stream settings, DA-HTCN supports the enriched five-stream decomposition:
@@ -71,6 +69,7 @@ DA-HTCN is derived from the Hyperformer codebase, but differs in several key asp
 
 DA-HTCN supports both:
 - Standard 4-stream: Joint, Bone, Joint Motion, Bone Motion
+- Enriched 4-stream (RICH5): **J/E/S/D** (Joint, Edge, Surface, Motion)
 - Enriched 5-stream (RICH5): **J/E/S/D/A** (Joint, Edge, Surface, Motion, Acceleration)
 
 Each stream can be trained with either DA-HTCN-MGCN or DA-HTCN-MA-GCN, and combined by late fusion (weighted sum of per-stream class probabilities).
