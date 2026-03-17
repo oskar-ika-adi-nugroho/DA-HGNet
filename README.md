@@ -5,7 +5,7 @@ This repository contains the reference implementation of **DA-HTCN**, a hybrid s
 
 - **Differential Hyperedge Self-Attention (DHSA)** for topology-aware global spatial interaction
 - **Multi-Scale Temporal Convolution (MultiScale-TCN)** for efficient temporal modeling
-- An **early-layer graph branch (Layers 1–4)** to strengthen local spatial grounding
+
 
 ## Figures
 
