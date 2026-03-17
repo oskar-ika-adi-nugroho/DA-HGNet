@@ -44,7 +44,7 @@ DA-HTCN is derived from the Hyperformer codebase, but differs in several key asp
    - Keep **hop-based RPE** and **hyperedge-token interactions** (joint-to-part pooling), but integrate them into both attention branches consistently.
    - Use a unified DHSA description aligned with Section 3 of the manuscript (Figures 2–3).
 
-3. ** Two variants GCN**   
+3. **Two variants GCN**   
    - Two variants are supported:
      - **DA-HTCN-MGCN**: masked (edge-importance) topology over a fixed K-partition adjacency
      - **DA-HTCN-MA-GCN**: masked topology + **sample-adaptive adjacency** blended with a learnable scalar gate
