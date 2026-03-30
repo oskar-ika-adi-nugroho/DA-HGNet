@@ -12,7 +12,7 @@ This repository contains the reference implementation of **DA-HGNet**, a hybrid 
 ### Figure 1. Overall framework
 ![Figure 1](DA-HTCN_README_assets/Figure1.png)
 
-### Figure 2. DA-HTCN block and DHSA components
+### Figure 2. DA-HGNet block and DHSA components
 ![Figure 2](DA-HTCN_README_assets/Figure2.png)
 
 ### Figure 3. Two-branch differential attention in DHSA
