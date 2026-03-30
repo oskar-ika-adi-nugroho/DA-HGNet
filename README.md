@@ -1,7 +1,7 @@
 # DA-HGNet : Differential-Attention Hyperedge Graph Network
 
-This code is based on Hyperformer  [Hypergraph Transformer for Skeleton-based Action Recognition.](https://arxiv.org/pdf/2211.09590.pdf). We made modifications for DA-HTCN.
-This repository contains the reference implementation of **DA-HTCN**, a hybrid skeleton-based action recognition model that combines:
+This code is based on Hyperformer  [Hypergraph Transformer for Skeleton-based Action Recognition.](https://arxiv.org/pdf/2211.09590.pdf). We made modifications for DA-HGNet.
+This repository contains the reference implementation of **DA-HGNet**, a hybrid skeleton-based action recognition model that combines:
 
 - **Differential Hyperedge Self-Attention (DHSA)** for topology-aware global spatial interaction
 - **Multi-Scale Temporal Convolution (MultiScale-TCN)** for efficient temporal modeling
@@ -23,7 +23,7 @@ This repository contains the reference implementation of **DA-HTCN**, a hybrid s
 
 ## Main idea (high level)
 
-Given an input sequence of 3D skeleton joints \(X \in \mathbb{R}^{N\times C\times T\times V\times M}\), DA-HTCN:
+Given an input sequence of 3D skeleton joints \(X \in \mathbb{R}^{N\times C\times T\times V\times M}\), DA-HGNet:
 1. Normalizes and reshapes the input so each person instance is processed as an independent sample in the backbone (\(B=N\cdot M\)).
 2. Applies **DHSA** to compute structure-aware attention with:
    - hop-distance RPE from the physical skeleton graph
@@ -34,7 +34,7 @@ Given an input sequence of 3D skeleton joints \(X \in \mathbb{R}^{N\times C\time
 
 ## Modifications / Changes from upstream (Hyperformer)
 
-DA-HTCN is derived from the Hyperformer codebase, but differs in several key aspects:
+DA-HGNet is derived from the Hyperformer codebase, but differs in several key aspects:
 
 1. **Differential attention in the spatial self-attention**
    - Replace the single attention map with a **two-branch attention** design.
@@ -46,14 +46,14 @@ DA-HTCN is derived from the Hyperformer codebase, but differs in several key asp
 
 3. **Two variants GCN**   
    - Two variants are supported:
-     - **DA-HTCN-MGCN**: masked (edge-importance) topology over a fixed K-partition adjacency
-     - **DA-HTCN-MA-GCN**: masked topology + **sample-adaptive adjacency** blended with a learnable scalar gate
+     - **DA-HGNet-MGCN**: masked (edge-importance) topology over a fixed K-partition adjacency
+     - **DA-HGNet-MA-GCN**: masked topology + **sample-adaptive adjacency** blended with a learnable scalar gate
 
 4. **Spatial fusion policy**
    - In Layers 1–10, DHSA and GCN outputs are fused by **summation** inside the spatial sub-layer before DropPath and residual addition.   
 
 5. **RICH5 input decomposition support (J/E/S/D/A)**
-   - In addition to classic 4-stream settings, DA-HTCN supports the enriched five-stream decomposition:
+   - In addition to classic 4-stream settings, DA-HGNet supports the enriched five-stream decomposition:
      - **J**: joint coordinates (root-normalized)
      - **E**: edge/bone vectors
      - **S**: surface (cross-product) features
@@ -67,12 +67,12 @@ DA-HTCN is derived from the Hyperformer codebase, but differs in several key asp
 
 ## Multi-stream setting (RICH5)
 
-DA-HTCN supports both:
+DA-HGNet supports both:
 - Standard 4-stream: Joint, Bone, Joint Motion, Bone Motion
 - Enriched 4-stream (RICH5): **J/E/S/D** (Joint, Edge, Surface, Motion)
 - Enriched 5-stream (RICH5): **J/E/S/D/A** (Joint, Edge, Surface, Motion, Acceleration)
 
-Each stream can be trained with either DA-HTCN-MGCN or DA-HTCN-MA-GCN, and combined by late fusion (weighted sum of per-stream class probabilities).
+Each stream can be trained with either DA-HGNet-MGCN or DA-HGNet-MA-GCN, and combined by late fusion (weighted sum of per-stream class probabilities).
 
 ## Training (NTU RGB+D 60, typical)
 
@@ -87,4 +87,4 @@ Each stream can be trained with either DA-HTCN-MGCN or DA-HTCN-MA-GCN, and combi
 
 ## Citation
 
-If you use DA-HTCN in your research, please cite the associated paper (manuscript) and the relevant baselines used in your experiments.
+If you use DA-HGNet in your research, please cite the associated paper (manuscript) and the relevant baselines used in your experiments.
