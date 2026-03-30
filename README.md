@@ -1,4 +1,4 @@
-# DA-HTCN: Differential-Attention Hyperedge Temporal Convolution Network
+# DA-HGNet : Differential-Attention Hyperedge Graph Network
 
 This code is based on Hyperformer  [Hypergraph Transformer for Skeleton-based Action Recognition.](https://arxiv.org/pdf/2211.09590.pdf). We made modifications for DA-HTCN.
 This repository contains the reference implementation of **DA-HTCN**, a hybrid skeleton-based action recognition model that combines:
