@@ -22,22 +22,41 @@ DHA-eGCN addresses these challenges by integrating:
 
 ## Figures
 
-### Figure 1. Overall DHA-eGCN framework
+### Figure 1. Overall DHA-eGCN architecture
 
-![Figure 1](DA-HTCN_README_assets/Figure1.png)
+![Figure 1](README_assets/Figure1.png)
 
-### Figure 2. DHA-eGCN block and DHA components
+**Figure 1.** Overall architecture of DHA-eGCN. The network processes the input skeleton sequence through data normalization, DHA-eGCN blocks, global average pooling, and a fully connected classifier. The first four layers use DHA + GCN + TCN, while deeper layers use DHA + TCN. Temporal downsampling is applied at layers 5 and 8.
 
-![Figure 2](DA-HTCN_README_assets/Figure2.png)
+### Figure 2. DHA-eGCN block
 
-### Figure 3. Two-branch differential attention in DHA
+![Figure 2](README_assets/Figure2.png)
 
-![Figure 3](DA-HTCN_README_assets/Figure3.png)
+**Figure 2.** Detailed DHA-eGCN block. The spatial module combines Differential Hyperedge Attention (DHA) with an optional MGCN or MAGCN branch. The output is then passed to a multi-scale TCN for temporal modeling. Residual connections are used in both spatial and temporal modules.
 
-### Figure 4. Enriched five-stream decomposition for skeleton-based action recognition
+### Figure 3. Projection and splitting for differential attention
 
-![Figure 4](DA-HTCN_README_assets/Figure4.png)
+![Figure 3](README_assets/Figure3.png)
 
+**Figure 3.** Projection and splitting process in DHA. The input feature is projected into query, key, and value tensors. The query and key projections are split into two branches, producing \(Q_1, Q_2, K_1, K_2\), while the value tensor \(V\) is shared.
+
+### Figure 4. Two-branch Differential Hyperedge Attention
+
+![Figure 4](README_assets/Figure4.png)
+
+**Figure 4.** Two-branch differential attention in DHA. Each branch computes a structure-aware attention map using joint-to-joint similarity, hop-based RPE, joint-to-hyperedge interaction, and hyperedge-derived bias. The second attention map is subtracted from the first using a learnable coefficient \(\lambda\), and the result is applied to \(V\).
+
+### Figure 5. Multi-stream RICH5 framework
+
+![Figure 5](README_assets/Figure5.png)
+
+**Figure 5.** Multi-stream RICH5 framework. The input skeleton sequence is decomposed into five complementary streams: Joint (J), Edge (E), Surface (S), Motion (M), and Acceleration (A). Each stream is processed by DHA-eMGCN or DHA-eMAGCN, and the final prediction is obtained by late fusion.
+
+### Figure 6. RICH5 feature decomposition
+
+![Figure 6](README_assets/Figure6.png)
+
+**Figure 6.** RICH5 feature decomposition. The five skeleton feature streams represent joint coordinates, bone-edge vectors, surface or cross-product features, temporal motion differences, and acceleration-like second-order temporal differences.
 ## Main Idea
 
 Given an input skeleton sequence:
