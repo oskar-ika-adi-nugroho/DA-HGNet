@@ -275,7 +275,7 @@ class MHSA(nn.Module):
         return x_spatial
 
 # ==============================
-# unit_vit: Transformer + ST-GCN (Early Layers)
+# unit_vit: Transformer + GCN (Early Layers)
 # ==============================
 class unit_vit(nn.Module):
     def __init__(self, dim_in, dim, A, num_of_heads, add_skip_connection=True,
