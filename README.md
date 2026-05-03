@@ -65,7 +65,15 @@ $$
 X \in \mathbb{R}^{N \times C \times T \times V \times M}
 $$
 
-where \(N\) is the batch size, \(C\) is the coordinate channel, \(T\) is the number of frames, \(V\) is the number of joints, and \(M\) is the number of persons, DHA-eGCN performs the following steps:
+where:
+
+- \(N\) is the batch size,
+- \(C\) is the coordinate channel,
+- \(T\) is the number of frames,
+- \(V\) is the number of joints,
+- \(M\) is the number of persons.
+
+DHA-eGCN performs the following steps:
 
 1. **Input normalization and reshaping**
 
