@@ -61,9 +61,9 @@ DHA-eGCN addresses these challenges by integrating:
 
 Given an input skeleton sequence:
 
-\[
+$$
 X \in \mathbb{R}^{N \times C \times T \times V \times M}
-\]
+$$
 
 where \(N\) is the batch size, \(C\) is the coordinate channel, \(T\) is the number of frames, \(V\) is the number of joints, and \(M\) is the number of persons, DHA-eGCN performs the following steps:
 
