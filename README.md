@@ -4,9 +4,7 @@ This repository provides the reference implementation of **DHA-eGCN**, a hybrid 
 
 DHA-eGCN is designed to preserve the local kinematic structure of the human body while capturing long-range spatiotemporal dependencies from skeleton sequences. It combines topology-aware differential hyperedge attention, graph convolution, and multi-scale temporal convolution for robust skeleton-based action recognition.
 
-The method is described in the accompanying manuscript:
 
-> **DHA-eGCN: Differential-Hyperedge-Attention-Enhanced Graph Convolution Network for Skeleton-based Human Action Recognition**
 
 ## Overview
 
