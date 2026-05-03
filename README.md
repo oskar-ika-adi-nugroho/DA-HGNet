@@ -256,22 +256,3 @@ According to the accompanying manuscript, the optimized full-GCN multi-model ens
 
 The best single-model setting is full-GCN DHA-eMAGCN with RICH5, which achieves strong performance while showing that full-depth graph modeling and enriched skeletal representations are complementary.
 
-## Repository Structure
-
-The main implementation follows the structure of the original Hyperformer codebase.
-
-Typical components include:
-
-```text
-model/
-  Hyperformer.py
-
-config/
-  ...
-
-data/
-  ntu/
-  ...
-
-work_dir/
-  ...
