@@ -258,7 +258,7 @@ According to the accompanying manuscript, the optimized full-GCN multi-model ens
 | Method | Stream Setting | X-Sub Top-1 | X-View Top-1 |
 |---|---:|---:|---:|
 | DHA-eGCN full-GCN | RICH4 | 93.7% | 97.0% |
-| DHA-eGCN full-GCN | RICH5 | 93.7% | 97.0% |
+
 
 The best single-model setting is full-GCN DHA-eMAGCN with RICH5, which achieves strong performance while showing that full-depth graph modeling and enriched skeletal representations are complementary.
 
